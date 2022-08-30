@@ -1,0 +1,329 @@
+# ICIST 2022 conference: 10th international conference on integration of science and technology for sustainable development.
+# Conference paper: Social capital and production risk: examining association using the case of irrigated rice farms in Northern Thailand.
+# Author: Christopher Llones & Suneeporn Suwanmaneepong
+
+
+# Libraries
+library(tidyverse)
+library(janitor)
+library(EFAtools)
+library(psych)
+library(sfaR)
+library(reshape2)
+library(gtsummary)
+
+
+
+# Table 1: ------------------------------------------------------------------------------------
+vtable::st(mlip_descriptive,
+           summ = c("notNA(x)", "mean(x)", "median(x)", "sd(x)", "min(x)", "max(x)"),
+           summ.names = c("n", "Mean/Percent", "Median", "Std.Dev", "Min", "Max"))
+
+
+# Table 2: scoial capital domain items --------------------------------------------------------
+
+## exploratory factor analysis
+social_fa <- 
+     fa(r = social_data, 
+        nfactors = 2, 
+        rotate = "varimax", 
+        fa = "ml")
+
+## factor loadings
+print(social_fa$loadings,
+      sort = TRUE,
+      cutoff = 0.4)
+
+## Cronbach's alpha
+alpha(social_data[, 1:4])
+alpha(social_data[, 5:8])
+
+
+# Figure 1: item correlation -----------------------------------------------------------------------
+
+social_data_renamed <- 
+     social_data %>% 
+     rename("In the village, people generally trust each other." = l30,
+            "The relationship among people in this neighborhood is harmonious." = l31,
+            "Members of the water user group go along with each other." = l34,
+            "Members of the water user group trust each other." = l35,
+            "Members communicate or interact with each other." = m50,
+            "Members communicate or interact with the WUG officer." = m51,
+            "Members communicate or interact with the irrigation staff." = m52,
+            "WUG communicated or interact with local government officials. " = m53)
+
+
+cor_mat <- round(cor(social_data_renamed, method = "spearman"), 3)
+cor_mat[lower.tri(cor_mat)] <- NA
+melted_cormat <- melt(cor_mat)
+
+str_wrap_factor <- function(x, ...) {
+     levels(x) <- str_wrap(levels(x), ...)
+     x
+}
+
+melted_cormat_heatmap <- 
+     melted_cormat %>% 
+     mutate(Var2 = fct_rev(Var2),
+            Var1 = factor(Var1),
+            Var1 = str_wrap_factor(Var1, width = 32)
+     ) %>% 
+     na.omit()
+
+label_data <-  
+     melted_cormat_heatmap %>% 
+     count(Var1) %>% 
+     mutate(Var1 = as.character(Var1),
+            Var2 = unique(melted_cormat_heatmap$Var2)) %>% 
+     mutate(x_labs = c("IT01","IT02", "IT03", "IT04", "RN01", "RN02", "RN03", "RN04"))
+
+melted_cormat_heatmap %>%      
+     ggplot(aes(x = Var2, y = Var1, fill = value)) +
+     geom_tile() +
+     geom_text(aes(label = value), color = "white") +
+     geom_text(data = label_data, aes(label = Var1, y = Var1, x = -0.2), 
+               inherit.aes = F,
+               vjust = 0.5,
+               hjust = 1
+               ) +
+     geom_text(data = label_data, aes(label = x_labs, y = 0, x = Var2), 
+               inherit.aes = F,
+               vjust = 0,
+               fontface = "bold",
+               color = "grey20"
+               ) +
+     geom_text(data = label_data, aes(label = x_labs, y = Var1, x = 0.1), inherit.aes = F, 
+               angle = 90, vjust = 1,
+               fontface = "bold",
+               color = "grey20"
+               ) +
+     scale_fill_gradient(low = "#264653", high = "#e76f51", 
+                         limit = c(0, 1), space = "Lab") +
+     scale_x_discrete(position = "top") +
+     guides(fill = guide_colorbar(title.position = "top",
+                                  title.hjust = 0.5, 
+                                  nrow = 1
+     )) +
+     coord_cartesian(clip = "off") +
+     theme_minimal() +
+     theme(plot.margin = margin(20, 20, 20, 180),
+           plot.caption.position = "panel",
+           plot.caption = element_text(hjust = 1, margin = margin(t=20), size = 12, color = "grey20", lineheight = 1.1),
+           panel.grid = element_blank(),
+           axis.text = element_blank(),
+           legend.position = c(0.80, 0.90),
+           legend.key.width = unit(10, "mm"),
+           legend.direction = "horizontal",
+           legend.title = element_text(size = 14),
+           legend.text = element_text(size = 10)
+     ) +
+     labs(fill = "Spearman correlation",
+          x = element_blank(),
+          y = element_blank(),
+          caption = "RN = Relationship network\nIT = Interpersonal relationship") 
+
+
+# Figure 2: perceived interpersonal trust and relationship network item response --------------------------------------
+
+likert_proportion <-  
+     social_data_renamed %>% 
+     pivot_longer(cols = 1:8, 
+                  names_to = "items", 
+                  values_to = "response") %>% 
+     count(items, response) %>% 
+     group_by(items) %>% 
+     mutate(prop_response = n / sum(n) * 100) %>% 
+     ungroup() %>% 
+     mutate(items = str_wrap(items, 35)) %>% 
+     mutate(response2 = factor(response, levels = 1:7) %>% fct_rev())
+
+
+likert_proportion %>% 
+     ggplot(aes(x = prop_response, y = items, fill = response2)) +
+     geom_col(size = 1, width = 0.5) +
+     geom_text(
+          aes(label = round(prop_response, 0), x = prop_response, y = items),
+          position = position_stack(vjust = 0.5),
+          color = "gray80") +
+     scale_fill_manual(values = c("#0d1b2a", "#1b263b", "#415a77", "#7d8597", "#979dac", "#cce3de", "#eaf4f4"),
+                       labels = c("Strongly agree", "6", "5", "4", "3", "2", "Strongly disagree")) +
+     guides(fill = guide_legend(nrow = 1,label.position = "top", reverse = TRUE)) +
+     theme_minimal() +
+     theme(plot.margin = margin(rep(20, 4)),
+           panel.grid = element_blank(),
+           axis.title.y = element_blank(),
+           axis.title.x = element_text(margin = margin(t=10), size = 14),
+           axis.text = element_text(size = 12, color = "grey20"),
+           legend.position = "top",
+           legend.text = element_text(size = 12)) +
+     labs(fill = element_blank(),
+          x = "Percent of farmers")
+
+
+# Table 3: production risk model ------------------------------------------------------------------------------
+
+## risk model: interpersonal trust
+risk_model_intertrust <- 
+     sfacross(formula = log(prod) ~ log(seed_q) + log(fert_q) + log(fl_labor_hr) + log(hl_labor_hr),
+              uhet = ~ yrs_farming + educ_level,
+              vhet = ~ seed_q + fl_labor_hr + hl_labor_hr + area + inter_trust,
+              data = prod_social_data,
+              method = "mla",
+              udist = "hnormal",
+              gradtol = 0.10)
+
+risk_model_intertrust %>% summary()
+
+# efficiency-risks estimates
+risk_model_intertrust <- 
+     risk_model_intertrust$dataTable %>% 
+     mutate(eff = efficiencies(risk_model_intertrust)$teBC,
+            resid_e = mlResiduals,
+            error_u = efficiencies(risk_model_intertrust)$u,
+            error_v = resid_e + error_u,
+            var_error_v = error_v^2,
+            var_error_u = error_u^2,
+            total_var_error = var_error_v + var_error_u,
+            share_var_v = var_error_v / total_var_error,
+            share_Var_u = var_error_u / total_var_error,
+            hi_intertrust = prod_data$hi_inter_trust,
+            hi_network_relation = prod_data$hi_network_relation)
+
+## risk model: relationship network
+risk_model_network_relation <- 
+     sfacross(formula = log(prod) ~ log(seed_q) + log(fert_q) + log(fl_labor_hr) + log(hl_labor_hr),
+              uhet = ~ yrs_farming + educ_level,
+              vhet = ~ seed_q + fl_labor_hr + hl_labor_hr + area + network_relation,
+              data = prod_social_data,
+              method = "mla",
+              udist = "hnormal",
+              gradtol = 0.10)
+
+risk_model_network_relation %>% summary()
+
+# efficiency-risks estimates
+eff_risk_estimates_network_relation <- 
+     risk_model_network_relation$dataTable %>% 
+     mutate(eff = efficiencies(risk_model_network_relation)$teBC,
+            resid_e = mlResiduals,
+            error_u = efficiencies(risk_model_network_relation)$u,
+            error_v = resid_e + error_u,
+            var_error_v = error_v^2,
+            var_error_u = error_u^2,
+            total_var_error = var_error_v + var_error_u,
+            share_var_v = var_error_v / total_var_error,
+            share_Var_u = var_error_u / total_var_error,
+            hi_intertrust = prod_data$hi_inter_trust,
+            hi_network_relation = prod_data$hi_network_relation)
+
+
+# Figure 3: Share of production risks: interpersonal trust -----------------------------------------------------------
+
+risk_model_intertrust %>% 
+     ggplot(aes(share_var_v, color = hi_intertrust)) +
+     stat_ecdf(size = 1.5, geom = "step", pad = TRUE) +
+     stat_ecdf(geom = "point", size = 3, show.legend = F) +
+     scale_x_continuous(limits = c(0.05, 1.0), breaks = seq(0, 1, 0.1)) +
+     scale_y_continuous(breaks = seq(0, 1, 0.20)) +
+     coord_cartesian(clip = "off") +
+     scale_color_manual(values = c("#264653", "#e76f51"), 
+                        labels = c("Lower scale", "Higher scale")) +
+     theme_minimal() +
+     theme(plot.margin = margin(rep(20, 4)),
+           panel.grid = element_blank(),
+           axis.title = element_text(size = 14),
+           axis.title.x = element_text(margin = margin(t=20)),
+           axis.title.y = element_text(margin = margin(r=20)),
+           legend.title = element_text(size = 14),
+           legend.text = element_text(size = 12),
+           legend.position = c(0.25, 0.5)) +
+     labs(x = "Production risk share to total production variability",
+          y = "Empirical cumulative density function (ECDF)",
+          color = "Perceived interpersonal trust")
+
+# Figure 4: shaore of production risk: relationship network ----------------------------------------------------------
+
+eff_risk_estimates_network_relation %>% 
+     ggplot(aes(share_var_v, color = hi_network_relation)) +
+     stat_ecdf(size = 1.5, geom = "step", pad = TRUE) +
+     stat_ecdf(geom = "point", size = 3, show.legend = F) +
+     scale_x_continuous(limits = c(0.05, 1.0), breaks = seq(0, 1, 0.1)) +
+     scale_y_continuous(breaks = seq(0, 1, 0.20)) +
+     coord_cartesian(clip = "off") +
+     scale_color_manual(values = c("#264653", "#e76f51"), 
+                        labels = c("Lower scale", "Higher scale")) +
+     theme_minimal() +
+     theme(plot.margin = margin(rep(20, 4)),
+           panel.grid = element_blank(),
+           axis.title = element_text(size = 14),
+           axis.title.x = element_text(margin = margin(t=20)),
+           axis.title.y = element_text(margin = margin(r=20)),
+           legend.title = element_text(size = 14),
+           legend.text = element_text(size = 12),
+           legend.position = c(0.25, 0.5)) +
+     labs(x = "Production risk share to total production variability",
+          y = "Empirical cumulative density function (ECDF)",
+          color = "Perceived relationship network")
+
+# Session info ----------------------------------------------------------------------
+
+sessionInfo()
+R version 4.2.1 (2022-06-23 ucrt)
+Platform: x86_64-w64-mingw32/x64 (64-bit)
+Running under: Windows 10 x64 (build 22000)
+
+Matrix products: default
+
+locale:
+[1] LC_COLLATE=English_Philippines.utf8  LC_CTYPE=English_Philippines.utf8   
+[3] LC_MONETARY=English_Philippines.utf8 LC_NUMERIC=C                        
+[5] LC_TIME=English_Philippines.utf8    
+
+attached base packages:
+[1] stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+ [1] gtsummary_1.6.1 reshape2_1.4.4  sfaR_0.1.1      psych_2.2.5     EFAtools_0.4.1 
+ [6] janitor_2.1.0   forcats_0.5.1   stringr_1.4.0   dplyr_1.0.9     purrr_0.3.4    
+[11] readr_2.1.2     tidyr_1.2.0     tibble_3.1.7    ggplot2_3.3.6   tidyverse_1.3.2
+
+loaded via a namespace (and not attached):
+  [1] googledrive_2.0.0    colorspace_2.0-3     ellipsis_0.3.2       sjlabelled_1.2.0    
+  [5] vtable_1.3.4         snakecase_0.11.0     fs_1.5.2             rstudioapi_0.13     
+  [9] farver_2.1.1         bit64_4.0.5          gsl_2.1-7.1          DT_0.23             
+ [13] fansi_1.0.3          mvtnorm_1.1-3        lubridate_1.8.0      xml2_1.3.3          
+ [17] codetools_0.2-18     mnormt_2.1.0         doParallel_1.0.17    knitr_1.39          
+ [21] Formula_1.2-4        jsonlite_1.8.0       gt_0.6.0             broom_1.0.0         
+ [25] dbplyr_2.2.1         marqLevAlg_2.0.7     stabledist_0.7-1     copula_1.1-0        
+ [29] compiler_4.2.1       httr_1.4.3           backports_1.4.1      assertthat_0.2.1    
+ [33] Matrix_1.4-1         fastmap_1.1.0        gargle_1.2.0         cli_3.3.0           
+ [37] htmltools_0.5.2      tools_4.2.1          coda_0.19-4          gtable_0.3.0        
+ [41] glue_1.6.2           primes_1.1.0         Rcpp_1.0.9           bbmle_1.0.25        
+ [45] cellranger_1.1.0     vctrs_0.4.1          svglite_2.1.0        nlme_3.1-157        
+ [49] broom.helpers_1.8.0  iterators_1.0.14     randtoolbox_2.0.1    insight_0.18.0      
+ [53] timeDate_4021.104    xfun_0.31            spatial_7.3-15       rvest_1.0.2         
+ [57] lifecycle_1.0.1      rngWELL_0.10-7       googlesheets4_1.0.0  nleqslv_3.3.2       
+ [61] MASS_7.3-57          zoo_1.8-10           scales_1.2.0         timeSeries_4021.104 
+ [65] vroom_1.5.7          miscTools_0.6-26     hms_1.1.1            parallel_4.2.1      
+ [69] sandwich_3.0-2       yaml_2.3.5           trustOptim_0.8.7.3   gridExtra_2.3       
+ [73] emdbook_1.3.12       fBasics_3042.89.2    bdsmatrix_1.3-6      likert_1.3.5        
+ [77] stringi_1.7.8        ucminf_1.1-4         pcaPP_2.0-2          foreach_1.5.2       
+ [81] qrng_0.0-8           rlang_1.0.3          pkgconfig_2.0.3      systemfonts_1.0.4   
+ [85] moments_0.14.1       evaluate_0.15        lattice_0.20-45      labeling_0.4.2      
+ [89] htmlwidgets_1.5.4    bit_4.0.4            tidyselect_1.1.2     plyr_1.8.7          
+ [93] magrittr_2.0.3       R6_2.5.1             generics_0.1.3       ADGofTest_0.3       
+ [97] DBI_1.1.3            pillar_1.8.0         haven_2.5.0          withr_2.5.0         
+[101] pspline_1.0-19       performance_0.9.1    modelr_0.1.8         crayon_1.5.1        
+[105] utf8_1.2.2           tzdb_0.3.0           rmarkdown_2.14       maxLik_1.5-2        
+[109] grid_4.2.1           readxl_1.4.0         reprex_2.0.1         digest_0.6.29       
+[113] webshot_0.5.3        xtable_1.8-4         GPArotation_2022.4-1 numDeriv_2016.8-1.1 
+[117] stats4_4.2.1         munsell_0.5.0        viridisLite_0.4.0    kableExtra_1.3.4    
+
+
+
+
+
+
+
+
+
