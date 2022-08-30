@@ -20,7 +20,7 @@ vtable::st(mlip_descriptive,
            summ.names = c("n", "Mean/Percent", "Median", "Std.Dev", "Min", "Max"))
 
 
-# Table 2: scoial capital domain items --------------------------------------------------------
+# Table 2: social capital domain items --------------------------------------------------------
 
 ## exploratory factor analysis
 social_fa <- 
